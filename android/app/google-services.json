@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "576174229586",
+    "project_id": "hydrogrowfixed",
+    "storage_bucket": "hydrogrowfixed.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576174229586:android:641f248053672866dcb78b",
+        "android_client_info": {
+          "package_name": "com.example.hydrogrow_fixed"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCciX1Zl9nER_xHo_exXm_T6z0Xi33bFMo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
