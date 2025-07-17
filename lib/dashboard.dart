@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hydrogrow_fixed/help_and_support.dart';
 import 'package:hydrogrow_fixed/login.dart';
 import 'package:hydrogrow_fixed/lights.dart';
 import 'package:hydrogrow_fixed/alerts.dart';
 import 'package:hydrogrow_fixed/settings.dart';
 import 'package:hydrogrow_fixed/threshold.dart';
+import 'package:hydrogrow_fixed/profile.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -16,7 +20,8 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   int currentPage = 0;
   bool showThresholdFromAlerts = false;
-  User? user;
+  bool showProfileFromSettings = false;
+  bool showHelpFromSettings = false;
 
   late final List<Widget> _pages;
 
@@ -25,23 +30,44 @@ class _DashboardState extends State<Dashboard> {
     'Lights',
     'Alerts',
     'Settings',
-    'Thresholds',
+    'Configure Thresholds',
+    'Profile',
+    'Help and Support',
   ];
+
+  User? currentUser;
 
   @override
   void initState() {
     super.initState();
+
+    // Get current user once on init
+    currentUser = FirebaseAuth.instance.currentUser;
+
     _pages = [
       const DashboardContent(),
       const LightsPage(),
-      // placeholder, actual content controlled dynamically
-      const SizedBox.shrink(),
-      const SettingsPage(),
+      const SizedBox.shrink(), // Alerts handled separately
+      SettingsPage(
+        onNavigateToProfile: () {
+          setState(() {
+            currentPage = 5;
+            showProfileFromSettings = true;
+            showHelpFromSettings = false;
+          });
+        },
+        onNavigateToHelp: () {
+          setState(() {
+            currentPage = 6;
+            showHelpFromSettings = true;
+            showProfileFromSettings = false;
+          });
+        },
+      ),
       const ThresholdPage(),
+      const ProfilePage(),
+      const HelpSupportScreen(),
     ];
-
-    // Get current logged-in user
-    user = FirebaseAuth.instance.currentUser;
   }
 
   Widget getPageForCurrentIndex() {
@@ -58,38 +84,57 @@ class _DashboardState extends State<Dashboard> {
           },
         );
       }
+    } else if (currentPage == 3) {
+      if (showProfileFromSettings) {
+        return const ProfilePage();
+      } else if (showHelpFromSettings) {
+        return const HelpSupportScreen();
+      } else {
+        return SettingsPage(
+          onNavigateToProfile: () {
+            setState(() {
+              currentPage = 5;
+              showProfileFromSettings = true;
+              showHelpFromSettings = false;
+            });
+          },
+          onNavigateToHelp: () {
+            setState(() {
+              currentPage = 6;
+              showHelpFromSettings = true;
+              showProfileFromSettings = false;
+            });
+          },
+        );
+      }
     } else {
-      showThresholdFromAlerts = false;
+      if (currentPage != 2) showThresholdFromAlerts = false;
+      if (currentPage != 3 && currentPage != 5) showProfileFromSettings = false;
+      if (currentPage != 3 && currentPage != 6) showHelpFromSettings = false;
       return _pages[currentPage];
-    }
-  }
-
-  Future<void> _logout() async {
-    await FirebaseAuth.instance.signOut();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const Login()),
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    String titleText = (currentPage == 2 && showThresholdFromAlerts)
-        ? 'Thresholds'
-        : _titles[currentPage];
-
-    String emailText = user?.email ?? 'No user';
-
     return Scaffold(
       appBar: AppBar(
-        leading: (currentPage == 2 && showThresholdFromAlerts)
+        leading: (currentPage == 2 && showThresholdFromAlerts) ||
+            (currentPage == 5 && showProfileFromSettings) ||
+            (currentPage == 6 && showHelpFromSettings)
             ? IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
             setState(() {
-              showThresholdFromAlerts = false;
+              if (currentPage == 2 && showThresholdFromAlerts) {
+                showThresholdFromAlerts = false;
+              } else if (currentPage == 5 && showProfileFromSettings) {
+                currentPage = 3;
+                showProfileFromSettings = false;
+              } else if (currentPage == 6 && showHelpFromSettings) {
+                currentPage = 3;
+                showHelpFromSettings = false;
+              }
             });
           },
         )
@@ -99,38 +144,32 @@ class _DashboardState extends State<Dashboard> {
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(titleText),
-            if (user != null)
-              Text(
-                emailText,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white70,
-                ),
-              ),
-          ],
+        title: Text(
+          (currentPage == 2 && showThresholdFromAlerts)
+              ? 'Thresholds'
+              : (currentPage == 5 && showProfileFromSettings)
+              ? 'Profile'
+              : (currentPage == 6 && showHelpFromSettings)
+              ? 'Help and Support'
+              : _titles[currentPage],
         ),
       ),
       drawer: Drawer(
         child: ListView(
           children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(color: Colors.green),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.account_circle, size: 64, color: Colors.white),
-                  const SizedBox(height: 8),
-                  Text(
-                    emailText,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
+            UserAccountsDrawerHeader(
+              accountName: const Text(''),
+              accountEmail: Text(currentUser?.email ?? 'No Email'),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Text(
+                  (currentUser?.email != null && currentUser!.email!.isNotEmpty)
+                      ? currentUser!.email![0].toUpperCase()
+                      : '?',
+                  style: const TextStyle(fontSize: 40.0),
+                ),
               ),
+              decoration: const BoxDecoration(color: Colors.green),
             ),
             ListTile(
               title: const Text('Dashboard'),
@@ -174,12 +213,6 @@ class _DashboardState extends State<Dashboard> {
               },
             ),
             ListTile(
-              title: const Text('Logout'),
-              onTap: () {
-                _logout();
-              },
-            ),
-            ListTile(
               title: const Text('Configure Thresholds'),
               onTap: () {
                 setState(() {
@@ -189,25 +222,75 @@ class _DashboardState extends State<Dashboard> {
                 Navigator.pop(context);
               },
             ),
+            ListTile(
+              title: const Text('My Profile'),
+              onTap: () {
+                setState(() {
+                  currentPage = 5;
+                  showProfileFromSettings = false;
+                });
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('Help and Support'),
+              onTap: () {
+                setState(() {
+                  currentPage = 6;
+                  showThresholdFromAlerts = false;
+                  showProfileFromSettings = false;
+                  showHelpFromSettings = false;
+                });
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('Logout'),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut(); // ✅ Sign out user
+                if (context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const Login()),
+                  );
+                }
+              },
+            ),
           ],
         ),
       ),
       body: getPageForCurrentIndex(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentPage,
+      bottomNavigationBar: (currentPage <= 4 || (currentPage == 5 && showProfileFromSettings))
+          ? NavigationBar(
+        selectedIndex: currentPage > 3 ? 3 : currentPage,
         onDestinationSelected: (int index) {
           setState(() {
             currentPage = index;
             showThresholdFromAlerts = false;
+            showProfileFromSettings = false;
+            showHelpFromSettings = false;
           });
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.light_mode), label: 'Lights'),
-          NavigationDestination(icon: Icon(Icons.notifications_none), label: 'Alerts'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.light_mode),
+            label: 'Lights',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none),
+            label: 'Alerts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
         ],
-      ),
+      )
+          : null,
     );
   }
 }
@@ -259,10 +342,22 @@ class DashboardContent extends StatelessWidget {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   children: [
-                    myRoundedBox(icon: Icons.water_drop_outlined, label: "Soil Moisture"),
-                    myRoundedBox(icon: Icons.thermostat_outlined, label: "Air Temperature"),
-                    myRoundedBox(icon: Icons.air_outlined, label: "Air Humidity"),
-                    myRoundedBox(icon: Icons.light_mode_outlined, label: "Ambient Light Intensity"),
+                    myRoundedBox(
+                      icon: Icons.water_drop_outlined,
+                      label: "Soil Moisture",
+                    ),
+                    myRoundedBox(
+                      icon: Icons.thermostat_outlined,
+                      label: "Air Temperature",
+                    ),
+                    myRoundedBox(
+                      icon: Icons.air_outlined,
+                      label: "Air Humidity",
+                    ),
+                    myRoundedBox(
+                      icon: Icons.light_mode_outlined,
+                      label: "Ambient Light Intensity",
+                    ),
                   ],
                 ),
               ),

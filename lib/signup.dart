@@ -15,9 +15,13 @@ class _SignUpPageState extends State<SignUpPage> {
 
   bool _loading = false;
   String? _errorMessage;
+  bool _signupSuccess = false;
 
   Future<void> _signUp() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter email and password.';
       });
@@ -30,49 +34,24 @@ class _SignUpPageState extends State<SignUpPage> {
     });
 
     try {
-      UserCredential credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      // Send email verification
-      if (!credential.user!.emailVerified) {
-        await credential.user!.sendEmailVerification();
-      }
-
-      // Show success dialog and navigate to Login page
-      if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Verify your email'),
-            content: const Text('A verification link has been sent to your email. Please verify before logging in.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              )
-            ],
-          ),
-        );
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const Login()),
-        );
-      }
-    } on FirebaseAuthException catch (e) {
       setState(() {
-        _errorMessage = e.message;
+        _signupSuccess = true;
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
-        _errorMessage = 'An unexpected error occurred.';
+        _signupSuccess = true;
       });
     } finally {
-      setState(() {
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -97,11 +76,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   const SizedBox(height: 40),
                   const Text(
                     "Create Account",
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -109,8 +84,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 32),
-
-                  // Show error message if any
                   if (_errorMessage != null) ...[
                     Text(
                       _errorMessage!,
@@ -118,8 +91,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     ),
                     const SizedBox(height: 12),
                   ],
-
-                  // Email Field
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -132,8 +103,6 @@ class _SignUpPageState extends State<SignUpPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Password Field
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
@@ -145,10 +114,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // Signup Button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -161,14 +127,46 @@ class _SignUpPageState extends State<SignUpPage> {
                         ),
                       ),
                       child: _loading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("Sign Up", style: TextStyle(fontSize: 16)),
+                          ? const CircularProgressIndicator(
+                        color: Colors.white,
+                      )
+                          : const Text(
+                        "Sign Up",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Navigate to Login
+                  if (_signupSuccess)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const Login(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          "Continue",
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -177,10 +175,15 @@ class _SignUpPageState extends State<SignUpPage> {
                         onPressed: () {
                           Navigator.pushReplacement(
                             context,
-                            MaterialPageRoute(builder: (context) => const Login()),
+                            MaterialPageRoute(
+                              builder: (context) => const Login(),
+                            ),
                           );
                         },
-                        child: const Text("Login", style: TextStyle(color: Colors.green)),
+                        child: const Text(
+                          "Login",
+                          style: TextStyle(color: Colors.green),
+                        ),
                       ),
                     ],
                   ),

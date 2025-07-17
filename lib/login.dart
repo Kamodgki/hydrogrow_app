@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dashboard.dart';
 import 'signup.dart';
 
 class Login extends StatefulWidget {
@@ -18,7 +17,14 @@ class _LoginState extends State<Login> {
   String? _errorMessage;
 
   Future<void> _signIn() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) {
+    FocusScope.of(context).unfocus();
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (_loading) return;
+
+    if (email.isEmpty || password.isEmpty) {
       setState(() {
         _errorMessage = 'Please enter email and password.';
       });
@@ -31,32 +37,25 @@ class _LoginState extends State<Login> {
     });
 
     try {
-      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      if (credential.user != null) {
-        if (!credential.user!.emailVerified) {
-          setState(() {
-            _errorMessage = 'Please verify your email before logging in.';
-          });
-          await FirebaseAuth.instance.signOut();
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const Dashboard()),
-          );
-        }
-      }
+      // ✅ Success: no need to navigate, wrapper will handle it
     } on FirebaseAuthException catch (e) {
-      print('FirebaseAuthException during sign-in: $e');
+      final message = switch (e.code) {
+        'user-not-found' => 'No user found with this email.',
+        'wrong-password' => 'Incorrect password.',
+        'invalid-email' => 'Invalid email address.',
+        'user-disabled' => 'This account has been disabled.',
+        _ => e.message ?? 'Authentication failed.',
+      };
+
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = message;
       });
-    } catch (e, stacktrace) {
-      print('Unexpected error during sign-in: $e');
-      print(stacktrace);
+    } catch (e) {
       setState(() {
         _errorMessage = 'An unexpected error occurred.';
       });
@@ -141,7 +140,7 @@ class _LoginState extends State<Login> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: () {
-                        // TODO: Implement forgot password flow if needed
+                        // TODO: Add forgot password functionality
                       },
                       child: const Text(
                         "Forgot Password?",
