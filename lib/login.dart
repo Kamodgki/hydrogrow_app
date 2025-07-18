@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'signup.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -17,12 +16,8 @@ class _LoginState extends State<Login> {
   String? _errorMessage;
 
   Future<void> _signIn() async {
-    FocusScope.of(context).unfocus();
-
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-
-    if (_loading) return;
 
     if (email.isEmpty || password.isEmpty) {
       setState(() {
@@ -41,21 +36,27 @@ class _LoginState extends State<Login> {
         email: email,
         password: password,
       );
-
-      // ✅ Success: no need to navigate, wrapper will handle it
+      // NO manual navigation here! Wrapper handles screen switch on auth state change.
     } on FirebaseAuthException catch (e) {
-      final message = switch (e.code) {
-        'user-not-found' => 'No user found with this email.',
-        'wrong-password' => 'Incorrect password.',
-        'invalid-email' => 'Invalid email address.',
-        'user-disabled' => 'This account has been disabled.',
-        _ => e.message ?? 'Authentication failed.',
-      };
-
       setState(() {
-        _errorMessage = message;
+        switch (e.code) {
+          case 'user-not-found':
+            _errorMessage = 'No user found for that email.';
+            break;
+          case 'wrong-password':
+            _errorMessage = 'Incorrect password.';
+            break;
+          case 'invalid-email':
+            _errorMessage = 'Invalid email address.';
+            break;
+          case 'user-disabled':
+            _errorMessage = 'This user has been disabled.';
+            break;
+          default:
+            _errorMessage = e.message ?? 'Login failed.';
+        }
       });
-    } catch (e) {
+    } catch (_) {
       setState(() {
         _errorMessage = 'An unexpected error occurred.';
       });
@@ -78,126 +79,77 @@ class _LoginState extends State<Login> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  const SizedBox(height: 40),
-                  const Text(
-                    "Welcome back!",
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+      appBar: AppBar(title: const Text('Login'), backgroundColor: Colors.green),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email),
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Log in to your HydroGrow account.",
-                    style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock),
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 32),
-
-                  if (_errorMessage != null) ...[
-                    Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      hintText: 'Email Address',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                ),
+                const SizedBox(height: 20),
+                if (_errorMessage != null)
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 20),
-
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      hintText: 'Password',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _signIn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
+                    child: _loading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : const Text('Login', style: TextStyle(fontSize: 16)),
                   ),
-
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text("Don't have an account? "),
+                    TextButton(
                       onPressed: () {
-                        // TODO: Add forgot password functionality
+                        // TODO: Navigate to your signup page if you have one
                       },
                       child: const Text(
-                        "Forgot Password?",
+                        "Sign Up",
                         style: TextStyle(color: Colors.green),
                       ),
                     ),
-                  ),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _signIn,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _loading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text("Login", style: TextStyle(fontSize: 16)),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  Row(
-                    children: const [
-                      Expanded(child: Divider(thickness: 1)),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text("OR"),
-                      ),
-                      Expanded(child: Divider(thickness: 1)),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text("Don't have an account? "),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const SignUpPage()),
-                          );
-                        },
-                        child: const Text("Sign Up", style: TextStyle(color: Colors.green)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

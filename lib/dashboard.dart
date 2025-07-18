@@ -1,14 +1,13 @@
-import 'dart:async';
-
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
+
 import 'package:hydrogrow_fixed/help_and_support.dart';
-import 'package:hydrogrow_fixed/login.dart';
 import 'package:hydrogrow_fixed/lights.dart';
 import 'package:hydrogrow_fixed/alerts.dart';
 import 'package:hydrogrow_fixed/settings.dart';
 import 'package:hydrogrow_fixed/threshold.dart';
-import 'package:hydrogrow_fixed/profile.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -18,287 +17,164 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  int currentPage = 0;
-  bool showThresholdFromAlerts = false;
-  bool showProfileFromSettings = false;
-  bool showHelpFromSettings = false;
+  int selectedIndex = 0;
 
-  late final List<Widget> _pages;
-
-  final List<String> _titles = [
-    'Dashboard',
-    'Lights',
-    'Alerts',
-    'Settings',
-    'Configure Thresholds',
-    'Profile',
-    'Help and Support',
-  ];
-
-  User? currentUser;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Get current user once on init
-    currentUser = FirebaseAuth.instance.currentUser;
-
-    _pages = [
-      const DashboardContent(),
-      const LightsPage(),
-      const SizedBox.shrink(), // Alerts handled separately
-      SettingsPage(
-        onNavigateToProfile: () {
-          setState(() {
-            currentPage = 5;
-            showProfileFromSettings = true;
-            showHelpFromSettings = false;
-          });
-        },
-        onNavigateToHelp: () {
-          setState(() {
-            currentPage = 6;
-            showHelpFromSettings = true;
-            showProfileFromSettings = false;
-          });
-        },
-      ),
-      const ThresholdPage(),
-      const ProfilePage(),
-      const HelpSupportScreen(),
-    ];
-  }
-
-  Widget getPageForCurrentIndex() {
-    if (currentPage == 2) {
-      if (showThresholdFromAlerts) {
-        return const ThresholdPage();
-      } else {
-        return AlertsPage(
-          onNavigateToThreshold: () {
-            setState(() {
-              showThresholdFromAlerts = true;
-              currentPage = 2;
-            });
-          },
+  void onItemTapped(int index) {
+    setState(() => selectedIndex = index);
+    switch (index) {
+      case 1:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ThresholdPage()),
         );
-      }
-    } else if (currentPage == 3) {
-      if (showProfileFromSettings) {
-        return const ProfilePage();
-      } else if (showHelpFromSettings) {
-        return const HelpSupportScreen();
-      } else {
-        return SettingsPage(
-          onNavigateToProfile: () {
-            setState(() {
-              currentPage = 5;
-              showProfileFromSettings = true;
-              showHelpFromSettings = false;
-            });
-          },
-          onNavigateToHelp: () {
-            setState(() {
-              currentPage = 6;
-              showHelpFromSettings = true;
-              showProfileFromSettings = false;
-            });
-          },
+        break;
+      case 2:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AlertsPage()),
         );
-      }
-    } else {
-      if (currentPage != 2) showThresholdFromAlerts = false;
-      if (currentPage != 3 && currentPage != 5) showProfileFromSettings = false;
-      if (currentPage != 3 && currentPage != 6) showHelpFromSettings = false;
-      return _pages[currentPage];
+        break;
+      case 3:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const LightsPage()),
+        );
+        break;
+      case 4:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SettingsPage()),
+        );
+        break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: (currentPage == 2 && showThresholdFromAlerts) ||
-            (currentPage == 5 && showProfileFromSettings) ||
-            (currentPage == 6 && showHelpFromSettings)
-            ? IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            setState(() {
-              if (currentPage == 2 && showThresholdFromAlerts) {
-                showThresholdFromAlerts = false;
-              } else if (currentPage == 5 && showProfileFromSettings) {
-                currentPage = 3;
-                showProfileFromSettings = false;
-              } else if (currentPage == 6 && showHelpFromSettings) {
-                currentPage = 3;
-                showHelpFromSettings = false;
-              }
-            });
-          },
-        )
-            : Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-        title: Text(
-          (currentPage == 2 && showThresholdFromAlerts)
-              ? 'Thresholds'
-              : (currentPage == 5 && showProfileFromSettings)
-              ? 'Profile'
-              : (currentPage == 6 && showHelpFromSettings)
-              ? 'Help and Support'
-              : _titles[currentPage],
-        ),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          children: [
-            UserAccountsDrawerHeader(
-              accountName: const Text(''),
-              accountEmail: Text(currentUser?.email ?? 'No Email'),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Text(
-                  (currentUser?.email != null && currentUser!.email!.isNotEmpty)
-                      ? currentUser!.email![0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(fontSize: 40.0),
-                ),
-              ),
-              decoration: const BoxDecoration(color: Colors.green),
-            ),
-            ListTile(
-              title: const Text('Dashboard'),
-              onTap: () {
-                setState(() {
-                  currentPage = 0;
-                  showThresholdFromAlerts = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Lights'),
-              onTap: () {
-                setState(() {
-                  currentPage = 1;
-                  showThresholdFromAlerts = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Alerts'),
-              trailing: const Icon(Icons.notifications_none),
-              onTap: () {
-                setState(() {
-                  currentPage = 2;
-                  showThresholdFromAlerts = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Settings'),
-              onTap: () {
-                setState(() {
-                  currentPage = 3;
-                  showThresholdFromAlerts = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Configure Thresholds'),
-              onTap: () {
-                setState(() {
-                  currentPage = 4;
-                  showThresholdFromAlerts = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('My Profile'),
-              onTap: () {
-                setState(() {
-                  currentPage = 5;
-                  showProfileFromSettings = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Help and Support'),
-              onTap: () {
-                setState(() {
-                  currentPage = 6;
-                  showThresholdFromAlerts = false;
-                  showProfileFromSettings = false;
-                  showHelpFromSettings = false;
-                });
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Logout'),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut(); // ✅ Sign out user
-                if (context.mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const Login()),
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-      body: getPageForCurrentIndex(),
-      bottomNavigationBar: (currentPage <= 4 || (currentPage == 5 && showProfileFromSettings))
-          ? NavigationBar(
-        selectedIndex: currentPage > 3 ? 3 : currentPage,
-        onDestinationSelected: (int index) {
-          setState(() {
-            currentPage = index;
-            showThresholdFromAlerts = false;
-            showProfileFromSettings = false;
-            showHelpFromSettings = false;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
+      body: const DashboardContent(),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: selectedIndex,
+        onTap: onItemTapped,
+        selectedItemColor: Colors.green,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.light_mode),
-            label: 'Lights',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.notifications_none),
-            label: 'Alerts',
-          ),
-          NavigationDestination(
+          BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'Threshold'),
+          BottomNavigationBarItem(icon: Icon(Icons.warning), label: 'Alerts'),
+          BottomNavigationBarItem(icon: Icon(Icons.lightbulb), label: 'Lights'),
+          BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
-      )
-          : null,
+      ),
     );
   }
 }
 
-class DashboardContent extends StatelessWidget {
+class DashboardContent extends StatefulWidget {
   const DashboardContent({super.key});
 
-  Widget myRoundedBox({required IconData icon, required String label}) {
+  @override
+  State<DashboardContent> createState() => _DashboardContentState();
+}
+
+class _DashboardContentState extends State<DashboardContent> {
+  late MqttServerClient client;
+
+  double temperature = 0;
+  double humidity = 0;
+  int soil = 0;
+  int ldr = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupMqttClient();
+    _connectToBroker();
+  }
+
+  void _setupMqttClient() {
+    client = MqttServerClient('broker.hivemq.com', '');
+    client.port = 1883;
+    client.keepAlivePeriod = 20;
+    client.setProtocolV311();
+    client.logging(on: false);
+    client.autoReconnect = true;
+    client.onDisconnected = _onDisconnected;
+
+    final connMess = MqttConnectMessage()
+        .withClientIdentifier(
+          'hydrogrow_flutter_${DateTime.now().millisecondsSinceEpoch}',
+        )
+        .startClean()
+        .withWillQos(MqttQos.atLeastOnce);
+
+    client.connectionMessage = connMess;
+  }
+
+  Future<void> _connectToBroker() async {
+    try {
+      await client.connect();
+    } catch (e) {
+      debugPrint("❌ Could not connect: $e");
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) _connectToBroker();
+      });
+      return;
+    }
+
+    if (client.connectionStatus!.state == MqttConnectionState.connected) {
+      debugPrint("✅ Connected to MQTT broker.");
+      client.subscribe('hydrogrow/sensordata', MqttQos.atLeastOnce);
+
+      client.updates!.listen((List<MqttReceivedMessage<MqttMessage?>> events) {
+        final MqttPublishMessage recMess =
+            events[0].payload as MqttPublishMessage;
+
+        final payloadBuffer = recMess.payload.message;
+        final jsonString = MqttPublishPayload.bytesToStringAsString(
+          payloadBuffer,
+        );
+
+        debugPrint("📨 Received: $jsonString");
+
+        try {
+          final data = jsonDecode(jsonString);
+
+          if (data is Map<String, dynamic> && mounted) {
+            setState(() {
+              temperature = (data['temperature'] ?? 0).toDouble();
+              humidity = (data['humidity'] ?? 0).toDouble();
+              soil = (data['soilMoisture'] ?? 0).toInt();
+              ldr = (data['light'] ?? 0).toInt();
+            });
+          }
+        } catch (e) {
+          debugPrint("⚠️ JSON parse error: $e");
+        }
+      });
+    } else {
+      debugPrint("❌ MQTT status: ${client.connectionStatus}");
+    }
+  }
+
+  void _onDisconnected() {
+    debugPrint("⚠️ Disconnected from broker.");
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) _connectToBroker();
+    });
+  }
+
+  Widget sensorCard({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -319,94 +195,103 @@ class DashboardContent extends StatelessWidget {
               color: Colors.grey,
             ),
           ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ],
       ),
     );
   }
 
   @override
+  void dispose() {
+    client.disconnect();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF5F6FA),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Scrollbar(
-          thumbVisibility: true,
-          child: ListView(
-            children: [
-              SizedBox(
-                height: 420,
-                child: GridView.count(
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  children: [
-                    myRoundedBox(
-                      icon: Icons.water_drop_outlined,
-                      label: "Soil Moisture",
-                    ),
-                    myRoundedBox(
-                      icon: Icons.thermostat_outlined,
-                      label: "Air Temperature",
-                    ),
-                    myRoundedBox(
-                      icon: Icons.air_outlined,
-                      label: "Air Humidity",
-                    ),
-                    myRoundedBox(
-                      icon: Icons.light_mode_outlined,
-                      label: "Ambient Light Intensity",
-                    ),
-                  ],
+      padding: const EdgeInsets.all(12),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: ListView(
+          children: [
+            SizedBox(
+              height: 420,
+              child: GridView.count(
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                children: [
+                  sensorCard(
+                    icon: Icons.water_drop_outlined,
+                    label: "Soil Moisture",
+                    value: "$soil",
+                  ),
+                  sensorCard(
+                    icon: Icons.thermostat_outlined,
+                    label: "Temperature",
+                    value: "${temperature.toStringAsFixed(1)}°C",
+                  ),
+                  sensorCard(
+                    icon: Icons.air_outlined,
+                    label: "Humidity",
+                    value: "${humidity.toStringAsFixed(1)}%",
+                  ),
+                  sensorCard(
+                    icon: Icons.light_mode_outlined,
+                    label: "Light (LDR)",
+                    value: "$ldr",
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 700,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: const Center(
+                child: Text(
+                  "Soil Moisture Trends (24h)",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
               ),
-              const SizedBox(height: 12),
-              Container(
-                height: 700,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: const Center(
-                  child: Text(
-                    "Soil Moisture Trends (24h)",
+            ),
+            const SizedBox(height: 12),
+            Container(
+              height: 300,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Device status",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.black,
+                      color: Colors.grey,
                     ),
                   ),
-                ),
+                  SizedBox(height: 12),
+                ],
               ),
-              const SizedBox(height: 12),
-              Container(
-                height: 300,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Device status",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
