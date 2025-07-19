@@ -2,12 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
-
-import 'package:hydrogrow_fixed/help_and_support.dart';
-import 'package:hydrogrow_fixed/lights.dart';
-import 'package:hydrogrow_fixed/alerts.dart';
-import 'package:hydrogrow_fixed/settings.dart';
-import 'package:hydrogrow_fixed/threshold.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -17,190 +12,163 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  int selectedIndex = 0;
+  late MqttServerClient client;
+  bool isConnected = false;
+  String status = "Connecting...";
+  double temperature = 0;
+  double humidity = 0;
+  double soilMoisture = 0;
+  double light = 0;
 
-  void onItemTapped(int index) {
-    setState(() => selectedIndex = index);
-    switch (index) {
-      case 1:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ThresholdPage()),
+  List<FlSpot> soilHistory = [];
+  List<FlSpot> tempHistory = [];
+  int counter = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    setupMqttClient();
+  }
+
+  Future<void> setupMqttClient() async {
+    client = MqttServerClient('broker.hivemq.com', '');
+    client.port = 1883;
+    client.logging(on: false);
+    client.keepAlivePeriod = 20;
+    client.onConnected = onConnected;
+    client.onDisconnected = onDisconnected;
+    client.onSubscribed = onSubscribed;
+    client.autoReconnect = true;
+
+    client.setProtocolV311();
+
+    client.clientIdentifier =
+        'flutter_client_${DateTime.now().millisecondsSinceEpoch}';
+
+    try {
+      print('MQTT: Connecting...');
+      await client.connect();
+
+      final statusResult = client.connectionStatus;
+      if (statusResult?.state == MqttConnectionState.connected) {
+        print('MQTT: Connected successfully');
+        setState(() {
+          isConnected = true;
+          status = "Connected";
+        });
+      } else {
+        print('MQTT: Connection failed - State is ${statusResult?.state}');
+        setState(() {
+          isConnected = false;
+          status = "Connection Failed";
+        });
+        client.disconnect();
+      }
+    } catch (e) {
+      print('MQTT: Exception during connect - $e');
+      setState(() {
+        isConnected = false;
+        status = "Connection Error";
+      });
+      client.disconnect();
+    }
+
+    if (client.connectionStatus?.state == MqttConnectionState.connected) {
+      client.subscribe("hydrogrow/sensordata", MqttQos.atMostOnce);
+
+      client.updates?.listen((List<MqttReceivedMessage<MqttMessage>> c) {
+        final recMess = c[0].payload as MqttPublishMessage;
+        final payload = MqttPublishPayload.bytesToStringAsString(
+          recMess.payload.message,
         );
-        break;
-      case 2:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AlertsPage()),
-        );
-        break;
-      case 3:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const LightsPage()),
-        );
-        break;
-      case 4:
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const SettingsPage()),
-        );
-        break;
+        print('MQTT: Received message: $payload');
+
+        final data = json.decode(payload);
+
+        setState(() {
+          temperature = (data['temperature'] ?? 0).toDouble();
+          humidity = (data['humidity'] ?? 0).toDouble();
+          soilMoisture = (data['soil_moisture'] ?? 0).toDouble();
+          light = (data['light'] ?? 0).toDouble();
+
+          counter++;
+          soilHistory.add(FlSpot(counter.toDouble(), soilMoisture));
+          tempHistory.add(FlSpot(counter.toDouble(), temperature));
+
+          if (soilHistory.length > 20) soilHistory.removeAt(0);
+          if (tempHistory.length > 20) tempHistory.removeAt(0);
+        });
+      });
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: const DashboardContent(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedIndex,
-        onTap: onItemTapped,
-        selectedItemColor: Colors.green,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'Threshold'),
-          BottomNavigationBarItem(icon: Icon(Icons.warning), label: 'Alerts'),
-          BottomNavigationBarItem(icon: Icon(Icons.lightbulb), label: 'Lights'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+  void onConnected() {
+    print('MQTT: onConnected callback');
+    setState(() {
+      isConnected = true;
+      status = "Connected";
+    });
+  }
+
+  void onDisconnected() {
+    print('MQTT: onDisconnected callback');
+    setState(() {
+      isConnected = false;
+      status = "Disconnected";
+    });
+  }
+
+  void onSubscribed(String topic) {
+    print('MQTT: Subscribed to $topic');
+    setState(() {
+      status = "Subscribed to $topic";
+    });
+  }
+
+  Widget buildLineChart(List<FlSpot> spots, Color lineColor) {
+    return LineChart(
+      LineChartData(
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            color: lineColor,
+            isCurved: true,
+            belowBarData: BarAreaData(show: false),
+            spots: spots,
           ),
         ],
       ),
     );
   }
-}
 
-class DashboardContent extends StatefulWidget {
-  const DashboardContent({super.key});
-
-  @override
-  State<DashboardContent> createState() => _DashboardContentState();
-}
-
-class _DashboardContentState extends State<DashboardContent> {
-  late MqttServerClient client;
-
-  double temperature = 0;
-  double humidity = 0;
-  int soil = 0;
-  int ldr = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _setupMqttClient();
-    _connectToBroker();
-  }
-
-  void _setupMqttClient() {
-    client = MqttServerClient('broker.hivemq.com', '');
-    client.port = 1883;
-    client.keepAlivePeriod = 20;
-    client.setProtocolV311();
-    client.logging(on: false);
-    client.autoReconnect = true;
-    client.onDisconnected = _onDisconnected;
-
-    final connMess = MqttConnectMessage()
-        .withClientIdentifier(
-          'hydrogrow_flutter_${DateTime.now().millisecondsSinceEpoch}',
-        )
-        .startClean()
-        .withWillQos(MqttQos.atLeastOnce);
-
-    client.connectionMessage = connMess;
-  }
-
-  Future<void> _connectToBroker() async {
-    try {
-      await client.connect();
-    } catch (e) {
-      debugPrint("❌ Could not connect: $e");
-      Future.delayed(const Duration(seconds: 5), () {
-        if (mounted) _connectToBroker();
-      });
-      return;
-    }
-
-    if (client.connectionStatus!.state == MqttConnectionState.connected) {
-      debugPrint("✅ Connected to MQTT broker.");
-      client.subscribe('hydrogrow/sensordata', MqttQos.atLeastOnce);
-
-      client.updates!.listen((List<MqttReceivedMessage<MqttMessage?>> events) {
-        final MqttPublishMessage recMess =
-            events[0].payload as MqttPublishMessage;
-
-        final payloadBuffer = recMess.payload.message;
-        final jsonString = MqttPublishPayload.bytesToStringAsString(
-          payloadBuffer,
-        );
-
-        debugPrint("📨 Received: $jsonString");
-
-        try {
-          final data = jsonDecode(jsonString);
-
-          if (data is Map<String, dynamic> && mounted) {
-            setState(() {
-              temperature = (data['temperature'] ?? 0).toDouble();
-              humidity = (data['humidity'] ?? 0).toDouble();
-              soil = (data['soilMoisture'] ?? 0).toInt();
-              ldr = (data['light'] ?? 0).toInt();
-            });
-          }
-        } catch (e) {
-          debugPrint("⚠️ JSON parse error: $e");
-        }
-      });
-    } else {
-      debugPrint("❌ MQTT status: ${client.connectionStatus}");
-    }
-  }
-
-  void _onDisconnected() {
-    debugPrint("⚠️ Disconnected from broker.");
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) _connectToBroker();
-    });
-  }
-
-  Widget sensorCard({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 32, color: Colors.green),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              color: Colors.grey,
+  Widget sensorCard(String title, double value, IconData icon, Color color) {
+    return Card(
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  value.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -213,85 +181,61 @@ class _DashboardContentState extends State<DashboardContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF5F6FA),
-      padding: const EdgeInsets.all(12),
-      child: Scrollbar(
-        thumbVisibility: true,
-        child: ListView(
-          children: [
-            SizedBox(
-              height: 420,
-              child: GridView.count(
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                children: [
-                  sensorCard(
-                    icon: Icons.water_drop_outlined,
-                    label: "Soil Moisture",
-                    value: "$soil",
-                  ),
-                  sensorCard(
-                    icon: Icons.thermostat_outlined,
-                    label: "Temperature",
-                    value: "${temperature.toStringAsFixed(1)}°C",
-                  ),
-                  sensorCard(
-                    icon: Icons.air_outlined,
-                    label: "Humidity",
-                    value: "${humidity.toStringAsFixed(1)}%",
-                  ),
-                  sensorCard(
-                    icon: Icons.light_mode_outlined,
-                    label: "Light (LDR)",
-                    value: "$ldr",
-                  ),
-                ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("HydroGrow Dashboard"),
+        backgroundColor: Colors.green,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(
+              status,
+              style: TextStyle(
+                color: isConnected ? Colors.white : Colors.red[300],
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
-            Container(
-              height: 700,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade300),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              sensorCard(
+                "Temperature (°C)",
+                temperature,
+                Icons.thermostat,
+                Colors.orange,
               ),
-              child: const Center(
-                child: Text(
-                  "Soil Moisture Trends (24h)",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
+              sensorCard(
+                "Humidity (%)",
+                humidity,
+                Icons.water_drop,
+                Colors.blue,
               ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade300),
+              sensorCard(
+                "Soil Moisture",
+                soilMoisture,
+                Icons.grass,
+                Colors.brown,
               ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Device status",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                ],
+              sensorCard("Light (LDR)", light, Icons.light_mode, Colors.yellow),
+              const SizedBox(height: 20),
+              const Text("Soil Moisture Trend"),
+              SizedBox(
+                height: 150,
+                child: buildLineChart(soilHistory, Colors.green),
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              const Text("Temperature Trend"),
+              SizedBox(
+                height: 150,
+                child: buildLineChart(tempHistory, Colors.orange),
+              ),
+            ],
+          ),
         ),
       ),
     );
