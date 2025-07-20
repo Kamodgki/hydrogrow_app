@@ -4,6 +4,10 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import 'alerts.dart';
+import 'lights.dart';
+import 'settings.dart';
+
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
 
@@ -15,6 +19,7 @@ class _DashboardState extends State<Dashboard> {
   late MqttServerClient client;
   bool isConnected = false;
   String status = "Connecting...";
+
   double temperature = 0;
   double humidity = 0;
   double soilMoisture = 0;
@@ -23,6 +28,18 @@ class _DashboardState extends State<Dashboard> {
   List<FlSpot> soilHistory = [];
   List<FlSpot> tempHistory = [];
   int counter = 0;
+
+  int currentPage = 0;
+
+  final List<String> _titles = [
+    'Dashboard',
+    'Lights',
+    'Alerts',
+    'Settings',
+    'Configure Thresholds',
+    'Profile',
+    'Help and Support',
+  ];
 
   @override
   void initState() {
@@ -39,9 +56,7 @@ class _DashboardState extends State<Dashboard> {
     client.onDisconnected = onDisconnected;
     client.onSubscribed = onSubscribed;
     client.autoReconnect = true;
-
     client.setProtocolV311();
-
     client.clientIdentifier =
         'flutter_client_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -57,7 +72,7 @@ class _DashboardState extends State<Dashboard> {
           status = "Connected";
         });
       } else {
-        print('MQTT: Connection failed - State is ${statusResult?.state}');
+        print('MQTT: Connection failed - ${statusResult?.state}');
         setState(() {
           isConnected = false;
           status = "Connection Failed";
@@ -65,7 +80,7 @@ class _DashboardState extends State<Dashboard> {
         client.disconnect();
       }
     } catch (e) {
-      print('MQTT: Exception during connect - $e');
+      print('MQTT: Exception - $e');
       setState(() {
         isConnected = false;
         status = "Connection Error";
@@ -75,20 +90,20 @@ class _DashboardState extends State<Dashboard> {
 
     if (client.connectionStatus?.state == MqttConnectionState.connected) {
       client.subscribe("hydrogrow/sensordata", MqttQos.atMostOnce);
-
       client.updates?.listen((List<MqttReceivedMessage<MqttMessage>> c) {
         final recMess = c[0].payload as MqttPublishMessage;
         final payload = MqttPublishPayload.bytesToStringAsString(
           recMess.payload.message,
         );
-        print('MQTT: Received message: $payload');
+        print('MQTT: Received: $payload');
 
         final data = json.decode(payload);
 
         setState(() {
           temperature = (data['temperature'] ?? 0).toDouble();
           humidity = (data['humidity'] ?? 0).toDouble();
-          soilMoisture = (data['soil_moisture'] ?? 0).toDouble();
+          soilMoisture = (data['soil'] ?? data['soil_moisture'] ?? 0)
+              .toDouble();
           light = (data['light'] ?? 0).toDouble();
 
           counter++;
@@ -103,7 +118,7 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void onConnected() {
-    print('MQTT: onConnected callback');
+    print('MQTT: Connected');
     setState(() {
       isConnected = true;
       status = "Connected";
@@ -111,7 +126,7 @@ class _DashboardState extends State<Dashboard> {
   }
 
   void onDisconnected() {
-    print('MQTT: onDisconnected callback');
+    print('MQTT: Disconnected');
     setState(() {
       isConnected = false;
       status = "Disconnected";
@@ -123,23 +138,6 @@ class _DashboardState extends State<Dashboard> {
     setState(() {
       status = "Subscribed to $topic";
     });
-  }
-
-  Widget buildLineChart(List<FlSpot> spots, Color lineColor) {
-    return LineChart(
-      LineChartData(
-        borderData: FlBorderData(show: false),
-        titlesData: FlTitlesData(show: false),
-        lineBarsData: [
-          LineChartBarData(
-            color: lineColor,
-            isCurved: true,
-            belowBarData: BarAreaData(show: false),
-            spots: spots,
-          ),
-        ],
-      ),
-    );
   }
 
   Widget sensorCard(String title, double value, IconData icon, Color color) {
@@ -173,6 +171,72 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  Widget buildLineChart(List<FlSpot> spots, Color color) {
+    return LineChart(
+      LineChartData(
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            color: color,
+            isCurved: true,
+            spots: spots,
+            belowBarData: BarAreaData(show: false),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget getPageForCurrentIndex() {
+    switch (currentPage) {
+      case 0:
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                sensorCard(
+                  "Temperature",
+                  temperature,
+                  Icons.thermostat,
+                  Colors.red,
+                ),
+                sensorCard("Humidity", humidity, Icons.water_drop, Colors.blue),
+                sensorCard(
+                  "Soil Moisture",
+                  soilMoisture,
+                  Icons.grass,
+                  Colors.brown,
+                ),
+                sensorCard("Light", light, Icons.wb_sunny, Colors.orange),
+                const SizedBox(height: 20),
+                const Text("📈 Soil Moisture History"),
+                SizedBox(
+                  height: 200,
+                  child: buildLineChart(soilHistory, Colors.brown),
+                ),
+                const SizedBox(height: 20),
+                const Text("📈 Temperature History"),
+                SizedBox(
+                  height: 200,
+                  child: buildLineChart(tempHistory, Colors.red),
+                ),
+              ],
+            ),
+          ),
+        );
+      case 1:
+        return const LightsPage();
+      case 2:
+        return const AlertsPage();
+      case 3:
+        return const SettingsPage();
+      default:
+        return const Center(child: Text("Unknown Page"));
+    }
+  }
+
   @override
   void dispose() {
     client.disconnect();
@@ -198,45 +262,50 @@ class _DashboardState extends State<Dashboard> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              sensorCard(
-                "Temperature (°C)",
-                temperature,
-                Icons.thermostat,
-                Colors.orange,
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: const [
+            DrawerHeader(
+              decoration: BoxDecoration(color: Colors.green),
+              child: Center(
+                child: Text(
+                  'Menu',
+                  style: TextStyle(color: Colors.white, fontSize: 24),
+                ),
               ),
-              sensorCard(
-                "Humidity (%)",
-                humidity,
-                Icons.water_drop,
-                Colors.blue,
-              ),
-              sensorCard(
-                "Soil Moisture",
-                soilMoisture,
-                Icons.grass,
-                Colors.brown,
-              ),
-              sensorCard("Light (LDR)", light, Icons.light_mode, Colors.yellow),
-              const SizedBox(height: 20),
-              const Text("Soil Moisture Trend"),
-              SizedBox(
-                height: 150,
-                child: buildLineChart(soilHistory, Colors.green),
-              ),
-              const SizedBox(height: 20),
-              const Text("Temperature Trend"),
-              SizedBox(
-                height: 150,
-                child: buildLineChart(tempHistory, Colors.orange),
-              ),
-            ],
-          ),
+            ),
+            ListTile(title: Text('Dashboard')),
+            ListTile(title: Text('Lights')),
+            ListTile(title: Text('Alerts')),
+            ListTile(title: Text('Settings')),
+            ListTile(title: Text('Configure Thresholds')),
+            ListTile(title: Text('My profile')),
+            ListTile(title: Text('Help and Support')),
+            ListTile(title: Text('Logout')),
+          ],
         ),
+      ),
+      body: getPageForCurrentIndex(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: currentPage,
+        onDestinationSelected: (int index) {
+          setState(() {
+            currentPage = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(icon: Icon(Icons.light_mode), label: 'Lights'),
+          NavigationDestination(
+            icon: Icon(Icons.notifications),
+            label: 'Alerts',
+          ),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+        ],
       ),
     );
   }
